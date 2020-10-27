@@ -12,12 +12,14 @@ import io.vertx.mysqlclient.MySQLClient;
 import io.vertx.sqlclient.*;
 import io.vertx.sqlclient.impl.ArrayTuple;
 
+import java.lang.reflect.ParameterizedType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID, E> {
+    private final Class<ID> idClass;
     protected Pool pool;
     protected RowMapperImpl<ID, E> rowMapper;
     private String deleteSql;
@@ -27,6 +29,11 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
     private String updateSql;
     private String querySql;
     private String countSql;
+
+    @SuppressWarnings("unchecked")
+    public AbstractCrudRepository() {
+        idClass = (Class<ID>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
+    }
 
     public void init(Pool pool, RowMapperImpl<ID, E> rowMapper) {
         this.pool = pool;
@@ -76,7 +83,8 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
                     if (res.succeeded()) {
                         try {
                             if (genPk) {
-                                rowMapper.setId(entity, res.result().property(MySQLClient.LAST_INSERTED_ID));
+                                var id = cast(res.result().property(MySQLClient.LAST_INSERTED_ID));
+                                rowMapper.setId(entity, id);
                             }
                             resultHandler.handle(Future.succeededFuture(entity));
                         } catch (Exception e) {
@@ -86,6 +94,23 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
                         resultHandler.handle(Future.failedFuture(res.cause()));
                     }
                 });
+    }
+
+    @SuppressWarnings("unchecked")
+    private ID cast(Long id) {
+        Object value;
+        if (Long.class.equals(idClass)) {
+            value = id;
+        } else if (Integer.class.equals(idClass)) {
+            value = id.intValue();
+        } else if (Short.class.equals(idClass)) {
+            value = id.shortValue();
+        } else if (Byte.class.equals(idClass)) {
+            value = id.byteValue();
+        } else {
+            value = id;
+        }
+        return (ID) value;
     }
 
     @Override
