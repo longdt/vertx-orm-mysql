@@ -1,12 +1,12 @@
-### Vertx-Orm-Mysql
+## Vertx-Orm-Mysql
 Simple API focusing on scalability and low overhead.
 
 Reactive and non blocking which able to handle many database connections with a single thread by use `Vertx-mysql-client`
-### Developers
-#### Testing
+## Developers
+### Testing
 Out of the box, the test suite runs a Docker container using TestContainers.
-#### Example
-###### Define Entity class:
+### Example
+##### Define Entity class:
 
 ```
 public class RuleTemplate {
@@ -22,12 +22,12 @@ public class RuleTemplate {
     ...
 }
 ```
-###### Define Repository:
+##### Define Repository:
 ```
 public interface RuleTemplateRepository extends CrudRepository<Integer, RuleTemplate> {
 }
 ```
-###### Implement Repository and declare field mapping
+##### Implement Repository and declare field mapping
 ```
 public class RuleTemplateRepositoryImpl extends AbstractCrudRepository<Integer, RuleTemplate> implements RuleTemplateRepository {
     public RuleTemplateRepositoryImpl(Pool pool) {
@@ -45,12 +45,12 @@ public class RuleTemplateRepositoryImpl extends AbstractCrudRepository<Integer, 
     }
 }
 ```
-###### Create repository instance:
+##### Create repository instance:
 ```
 RuleTemplateRepository repository = new RuleTemplateRepositoryImpl(pool);
 ```
-###### Now it's time to use. Let's try some simple methods:
-####### insert
+##### Now it's time to use. Let's try some simple methods:
+###### insert
 ```
 var template = new RuleTemplate();
 ...
@@ -62,7 +62,7 @@ repository.insert(template, ar -> {
     }
 });
 ```
-####### update
+###### update
 ```
 var template = new RuleTemplate().setId(1);
 ...
@@ -74,7 +74,7 @@ repository.update(template, ar -> {
     }
 });
 ```
-####### find by id
+###### find by id
 ```
 repository.find(id, ar -> {
     if (ar.succeeded()) {
@@ -84,7 +84,7 @@ repository.find(id, ar -> {
     }
 });
 ```
-####### find by query
+###### find by query
 ```
 import static com.github.longdt.vertxorm.repository.query.QueryFactory.*;
 
@@ -97,7 +97,7 @@ repository.findAll(query, ar -> {
     }
 });
 ```
-####### find with paging
+###### find with paging
 ```
 import static com.github.longdt.vertxorm.repository.query.QueryFactory.*;
 
