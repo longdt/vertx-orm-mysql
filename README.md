@@ -111,3 +111,23 @@ repository.findAll(query, pageRequest, ar -> {
     }
 });
 ```
+###### transaction with SQLHelper
+```
+//find then update example
+var id = 1;
+SQLHelper.inTransactionSingle(repository.getPool()
+        , conn -> repository.find(conn, id)     //find entity by id
+                .map(entityOpt -> entityOpt.orElseThrow(() -> new EntityNotFoundException("id: " + id + " is not found")))
+                .compose(entity -> {
+                    //update entity
+                    entity.setUpdatedAt(LocalDateTime.now());
+                    return repository.update(entity);
+                })
+        , ar -> {   //handle result of transaction
+            if (ar.succeeded()) {
+                System.out.println(ar.result());
+            } else {
+                ar.cause().printStackTrace();
+            }
+        });
+```
