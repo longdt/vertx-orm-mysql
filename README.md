@@ -5,6 +5,14 @@ Reactive and non blocking which able to handle many database connections with a 
 ## Developers
 ### Testing
 Out of the box, the test suite runs a Docker container using TestContainers.
+### Maven dependency
+```
+<dependency>
+    <groupId>com.github.longdt</groupId>
+    <artifactId>vertx-orm-mysql</artifactId>
+    <version>1.0</version>
+</dependency>
+```
 ### Example
 ##### Define Entity class:
 
