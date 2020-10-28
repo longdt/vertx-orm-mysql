@@ -6,34 +6,13 @@ import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-public class Futures {
-    public static <T> T join(AsyncResult<T> asyncResult) {
-        if (asyncResult.succeeded()) {
-            return asyncResult.result();
-        } else if (asyncResult.failed()) {
-            throw new CompletionException(asyncResult.cause());
-        }
-        return null;
-    }
-
-    public static <T> T join(Future<T> future) {
-        if (future.succeeded()) {
-            return future.result();
-        } else if (future.failed()) {
-            throw new CompletionException(future.cause());
-        }
-        CountDownLatch lock = new CountDownLatch(1);
-        future.onComplete(event -> lock.countDown());
-        try {
-            lock.await();
-            return join(future);
-        } catch (Exception e) {
-            throw new CompletionException(e);
-        }
+public final class Futures {
+    private Futures() {
     }
 
     public static <T, V, U, R> Future<R> toFuture(QuadConsumer<T, V, U, Handler<AsyncResult<R>>> consumer, T arg1, V arg2, U arg3) {
@@ -58,6 +37,35 @@ public class Futures {
         Promise<R> promise = Promise.promise();
         consumer.accept(promise);
         return promise.future();
+    }
+
+    public static <T> T joinNow(Future<T> future) {
+        if (future.succeeded()) {
+            return future.result();
+        } else if (future.failed()) {
+            throw new CompletionException(future.cause());
+        }
+        return null;
+    }
+
+    public static <T> T join(Future<T> future) {
+        return join(future, -1, TimeUnit.NANOSECONDS);
+    }
+
+    public static <T> T join(Future<T> future, long time, TimeUnit unit) {
+        if (future.succeeded()) {
+            return future.result();
+        } else if (future.failed()) {
+            throw new CompletionException(future.cause());
+        }
+        var thread = Thread.currentThread();
+        future.onComplete(event -> LockSupport.unpark(thread));
+        if (time > 0) {
+            LockSupport.parkNanos(future, unit.toNanos(time));
+        } else {
+            LockSupport.park(future);
+        }
+        return joinNow(future);
     }
 
     public static <T, V, S, R> R sync(QuadConsumer<T, V, S, Handler<AsyncResult<R>>> consumer, T arg1, V arg2, S arg3) {
