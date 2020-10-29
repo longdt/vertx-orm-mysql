@@ -210,19 +210,20 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
 
     @Override
     public void findAll(SqlConnection conn, Query<E> query, PageRequest pageRequest, Handler<AsyncResult<Page<E>>> resultHandler) {
-        count(conn, query)
-                .compose(cnt -> {
-                    if (cnt == 0) {
-                        return Future.succeededFuture(new Page<>(pageRequest, cnt, Collections.<E>emptyList()));
+        Promise<SqlResult<List<E>>> pageResult = Promise.promise();
+        query.limit(pageRequest.getSize()).offset(pageRequest.getOffset());
+        var queryStr = toSQL(querySql, query);
+        var params = getSqlParams(query);
+        conn.preparedQuery(queryStr)
+                .collecting(Collectors.mapping(rowMapper::map, Collectors.toList()))
+                .execute(params, pageResult);
+        pageResult.future()
+                .compose(sqlResult -> {
+                    var content = sqlResult.value();
+                    if (content.size() < pageRequest.getSize()) {
+                        return Future.succeededFuture(new Page<>(pageRequest, pageRequest.getOffset() + content.size(), content));
                     }
-                    Promise<SqlResult<List<E>>> pageResult = Promise.promise();
-                    query.limit(pageRequest.getSize()).offset(pageRequest.getOffset());
-                    var queryStr = toSQL(querySql, query);
-                    var params = getSqlParams(query);
-                    conn.preparedQuery(queryStr)
-                            .collecting(Collectors.mapping(rowMapper::map, Collectors.toList()))
-                            .execute(params, pageResult);
-                    return pageResult.future().map(sqlResult -> new Page<>(pageRequest, cnt, sqlResult.value()));
+                    return count(conn, query).map(cnt -> new Page<>(pageRequest, cnt, content));
                 })
                 .onComplete(resultHandler);
     }

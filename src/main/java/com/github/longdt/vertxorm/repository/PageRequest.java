@@ -48,7 +48,7 @@ public class PageRequest {
     }
 
     @JsonIgnore
-    public int getOffset() {
+    public long getOffset() {
         return (index - 1) * size;
     }
 }
