@@ -44,7 +44,7 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
                 + " VALUES "
                 + rowMapper.getColumnNames().stream().map(c -> "?").collect(Collectors.joining(",", "(", ")"))
                 + " ON DUPLICATE KEY UPDATE "
-                + rowMapper.getColumnNames(false).stream().map(c -> "`" + c + "` = `" + c + "`").collect(Collectors.joining(", "));
+                + rowMapper.getColumnNames(false).stream().map(c -> "`" + c + "` = ?").collect(Collectors.joining(", "));
 
         insertSql = "INSERT INTO `" + rowMapper.tableName() + "` "
                 + rowMapper.getColumnNames(false).stream().map(c -> "`" + c + "`").collect(Collectors.joining(",", "(", ")"))
@@ -128,6 +128,7 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
 
     private void upsert(SqlConnection conn, E entity, Handler<AsyncResult<E>> resultHandler) {
         var params = rowMapper.toTuple(entity);
+        Tuples.addAll(params, rowMapper.toTuple(entity, false));
         conn.preparedQuery(upsertSql)
                 .execute(params, res -> {
                     if (res.succeeded()) {
