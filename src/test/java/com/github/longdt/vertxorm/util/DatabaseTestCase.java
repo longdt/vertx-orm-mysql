@@ -74,17 +74,18 @@ public abstract class DatabaseTestCase {
 
     @AfterEach
     protected void tearDown(Vertx vertx, VertxTestContext testContext) {
-        SQLHelper.inTransactionSingle(pool
-                , conn -> SQLHelper.query(conn, "SELECT concat('DROP TABLE IF EXISTS `', table_name, '`;')\n" +
-                        "FROM information_schema.tables\n" +
-                        "WHERE table_schema = '" + database + "'", Collectors.mapping(r -> r.getString(0), Collectors.toList()))
-                        .compose(sqlResult -> {
-                            StringBuilder sql = new StringBuilder("SET FOREIGN_KEY_CHECKS = 0;");
-                            sqlResult.value().forEach(sql::append);
-                            sql.append("SET FOREIGN_KEY_CHECKS = 1;");
-                            return SQLHelper.query(conn, sql.toString());
-                        })
-                , testContext.completing());
+        pool.withTransaction(conn -> conn.query("SELECT concat('DROP TABLE IF EXISTS `', table_name, '`;')\n" +
+                "FROM information_schema.tables\n" +
+                "WHERE table_schema = '" + database + "'")
+                .collecting(Collectors.mapping(r -> r.getString(0), Collectors.toList()))
+                .execute()
+                .compose(sqlResult -> {
+                    StringBuilder sql = new StringBuilder("SET FOREIGN_KEY_CHECKS = 0;");
+                    sqlResult.value().forEach(sql::append);
+                    sql.append("SET FOREIGN_KEY_CHECKS = 1;");
+                    return conn.query(sql.toString()).execute();
+                }))
+                .onComplete(testContext.succeedingThenComplete());
     }
 
     protected void awaitCompletion(BiConsumer<Vertx, VertxTestContext> consumer, Vertx vertx) {
@@ -116,7 +117,7 @@ public abstract class DatabaseTestCase {
     public Future<RowSet<Row>> prepareDB(Path script) {
         try {
             var content = Files.readString(script, StandardCharsets.UTF_8);
-            return SQLHelper.query(pool, content);
+            return pool.query(content).execute();
         } catch (IOException e) {
             return Future.failedFuture(e);
         }

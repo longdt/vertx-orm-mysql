@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.github.longdt.vertxorm.repository.RowMapper;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.json.jackson.JacksonCodec;
+import io.vertx.core.json.jackson.DatabindCodec;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -110,7 +110,7 @@ public class BuilderImpl<ID, E> implements RowMapper.Builder<ID, E> {
             return v != null ? Json.encode(v) : null;
         },
                 (entity, value) -> {
-                    if (value != null) setter.accept(entity, JacksonCodec.fromString(value, type));
+                    if (value != null) setter.accept(entity, ((DatabindCodec) Json.CODEC).fromString(value, type));
                 }));
         return this;
     }
