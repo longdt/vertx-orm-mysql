@@ -4,18 +4,21 @@ import java.util.List;
 
 public class In<E, V> extends SingleQuery<E> {
 
+    @SuppressWarnings("unchecked")
     public In(String fieldName, List<V> values) {
-        super(fieldName, null, values);
-        querySql = createQuerySql();
+        super(fieldName, (List<Object>) values);
     }
 
-    private String createQuerySql() {
-        StringBuilder builder = new StringBuilder();
-        builder.append('`').append(fieldName).append("` IN (");
-        for (int i = 0; i < getConditionParams().size(); ++i) {
-            builder.append("?,");
+    @Override
+    public int appendQuerySql(StringBuilder sqlBuilder, int index) {
+        sqlBuilder.append('`')
+                .append(fieldName)
+                .append("` IN (");
+        for (int i = 0; i < params.size(); ++i) {
+            sqlBuilder.append("?,");
         }
-        builder.deleteCharAt(builder.length() - 1);
-        return builder.append(')').toString();
+        sqlBuilder.deleteCharAt(sqlBuilder.length() - 1);
+        sqlBuilder.append(')');
+        return index + params.size();
     }
 }

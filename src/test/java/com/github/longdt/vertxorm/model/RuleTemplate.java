@@ -1,12 +1,10 @@
 package com.github.longdt.vertxorm.model;
 
-import com.fasterxml.jackson.databind.PropertyNamingStrategy;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.vertx.core.json.JsonObject;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
-@JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy.class)
 public class RuleTemplate {
     private Integer id;
     private String name;
@@ -17,6 +15,9 @@ public class RuleTemplate {
     private LocalDateTime updatedAt;
 
     public RuleTemplate() {
+    }
+
+    public RuleTemplate(JsonObject jsonObject) {
     }
 
     public Integer getId() {

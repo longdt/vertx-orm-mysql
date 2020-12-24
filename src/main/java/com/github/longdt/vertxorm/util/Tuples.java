@@ -17,11 +17,26 @@ public class Tuples {
         return t1;
     }
 
+    public static Tuple addAll(Tuple tuple, Object[] values, int offset) {
+        for (int i = offset; i < values.length; ++i) {
+            tuple.addValue(values[i]);
+        }
+        return tuple;
+    }
+
     public static Tuple tuple(Tuple src) {
         return new ArrayTuple(src);
     }
 
     public static Tuple tuple(int capacity) {
         return new ArrayTuple(capacity);
+    }
+
+    public static Tuple shift(Object[] data, int offset) {
+        return new ShiftedArrayTuple(data, offset);
+    }
+
+    public static Tuple rotate(Object[] data, int offset) {
+        return new RotatedArrayTuple(data, offset);
     }
 }

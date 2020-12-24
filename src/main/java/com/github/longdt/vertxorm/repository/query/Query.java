@@ -8,9 +8,15 @@ import java.util.List;
 
 public interface Query<E> {
 
-    String getConditionSql();
+    int appendQuerySql(StringBuilder sqlBuilder, int index);
 
-    Tuple getConditionParams();
+    Tuple appendQueryParams(Tuple tuple);
+
+    Tuple getQueryParams();
+
+    default boolean isConditional() {
+        return true;
+    }
 
     @SuppressWarnings({"unchecked"})
     default Query<E> orderBy(Order<E>... orders) {

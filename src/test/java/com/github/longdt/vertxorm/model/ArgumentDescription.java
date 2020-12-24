@@ -1,9 +1,18 @@
 package com.github.longdt.vertxorm.model;
 
+import io.vertx.core.json.JsonObject;
+
 public class ArgumentDescription {
     private String name;
     private ValueType type;
     private String description;
+
+    public ArgumentDescription() {
+    }
+
+    public ArgumentDescription(JsonObject jsonObject) {
+
+    }
 
     public enum ValueType {
         INTEGER, DECIMAL, STRING, DATE

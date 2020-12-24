@@ -5,7 +5,7 @@ create table rule_template
     created_at timestamp  default CURRENT_TIMESTAMP null,
     updated_at TIMESTAMP                            NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     name       varchar(50)                          not null,
-    arguments  varchar(2048)                        not null,
+    arguments  varchar(2048)                        null,
     flink_job  varchar(50)                          not null,
     active     tinyint(1) default 1                 not null,
     created_by varchar(255)                         null,

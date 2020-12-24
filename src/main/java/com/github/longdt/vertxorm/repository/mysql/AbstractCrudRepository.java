@@ -1,85 +1,66 @@
 package com.github.longdt.vertxorm.repository.mysql;
 
 import com.github.longdt.vertxorm.repository.*;
-import com.github.longdt.vertxorm.repository.base.RowMapperImpl;
 import com.github.longdt.vertxorm.repository.query.Query;
 import com.github.longdt.vertxorm.util.Tuples;
 import io.vertx.core.Future;
+import io.vertx.core.impl.Arguments;
 import io.vertx.mysqlclient.MySQLClient;
 import io.vertx.sqlclient.*;
-import io.vertx.sqlclient.impl.ArrayTuple;
 
-import java.lang.reflect.ParameterizedType;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID, E> {
-    private final Class<ID> idClass;
     protected Pool pool;
-    protected RowMapperImpl<ID, E> rowMapper;
-    private String deleteSql;
-    private String upsertSql;
-    private String insertSql;
-    private String insertPkSql;
-    private String updateSql;
-    private String querySql;
-    private String countSql;
+    private IdAccessor<ID, E> idAccessor;
+    protected Function<Row, E> rowMapper;
+    protected Function<E, Object[]> parametersMapper;
+    protected Collector<Row, ?, List<E>> collector;
+    protected SqlSupport sqlSupport;
 
-    @SuppressWarnings("unchecked")
-    public AbstractCrudRepository() {
-        idClass = (Class<ID>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
-    }
 
-    public void init(Pool pool, RowMapperImpl<ID, E> rowMapper) {
+    public void init(Pool pool, Configuration<ID, E> configuration) {
+        Arguments.require(configuration.getDialect() == SqlDialect.MYSQL, "Invalid dialect");
         this.pool = pool;
-        this.rowMapper = rowMapper;
-        deleteSql = "DELETE FROM `" + rowMapper.tableName() + "` WHERE `" + rowMapper.pkName() + "` = ?";
-        upsertSql = "INSERT INTO `" + rowMapper.tableName() + "` "
-                + rowMapper.getColumnNames().stream().map(c -> "`" + c + "`").collect(Collectors.joining(",", "(", ")"))
-                + " VALUES "
-                + rowMapper.getColumnNames().stream().map(c -> "?").collect(Collectors.joining(",", "(", ")"))
-                + " ON DUPLICATE KEY UPDATE "
-                + rowMapper.getColumnNames(false).stream().map(c -> "`" + c + "` = ?").collect(Collectors.joining(", "));
-
-        insertSql = "INSERT INTO `" + rowMapper.tableName() + "` "
-                + rowMapper.getColumnNames(false).stream().map(c -> "`" + c + "`").collect(Collectors.joining(",", "(", ")"))
-                + " VALUES "
-                + rowMapper.getColumnNames(false).stream().map(c -> "?").collect(Collectors.joining(",", "(", ")"));
-
-        insertPkSql = "INSERT INTO `" + rowMapper.tableName() + "` "
-                + rowMapper.getColumnNames().stream().map(c -> "`" + c + "`").collect(Collectors.joining(",", "(", ")"))
-                + " VALUES "
-                + rowMapper.getColumnNames().stream().map(c -> "?").collect(Collectors.joining(",", "(", ")"));
-
-        updateSql = "UPDATE `" + rowMapper.tableName() + "`"
-                + " SET " + rowMapper.getColumnNames(false).stream().map(c -> "`" + c + "` = ?").collect(Collectors.joining(","))
-                + " WHERE `" + rowMapper.pkName() + "` = ?";
-        querySql = "SELECT " + rowMapper.getColumnNames().stream().map(c -> "`" + c + "`").collect(Collectors.joining(","))
-                + " FROM `" + rowMapper.tableName() + "`";
-        countSql = "SELECT count(*) FROM `" + rowMapper.tableName() + "`";
+        this.rowMapper = Objects.requireNonNull(configuration.getRowMapper());
+        this.collector = Collectors.mapping(rowMapper, Collectors.toList());
+        this.parametersMapper = Objects.requireNonNull(configuration.getParametersMapper());
+        this.idAccessor = Objects.requireNonNull(configuration.getIdAccessor());
+        this.sqlSupport = new SqlSupportImpl(configuration.getTableName(), configuration.getColumnNames());
     }
 
     @Override
     public Future<E> save(SqlConnection conn, E entity) {
-        if (rowMapper.getId(entity) != null) {
-            return upsert(conn, entity);
+        if (idAccessor.getId(entity) == null) {
+            return insert(conn, entity);
         }
-        return insert(conn, entity);
+        return upsert(conn, entity);
     }
 
     @Override
     public Future<E> insert(SqlConnection conn, E entity) {
-        boolean genPk = rowMapper.isPkAutoGen() && rowMapper.getId(entity) == null;
-        var params = rowMapper.toTuple(entity, !genPk);
-        String sql = genPk ? insertSql : insertPkSql;
+        boolean genPk = idAccessor.getId(entity) == null;
+        var params = parametersMapper.apply(entity);
+        String sql;
+        Tuple paramsTuple;
+        if (genPk) {
+            sql = sqlSupport.getAutoIdInsertSql();
+            paramsTuple = Tuples.shift(params, 1);
+        } else {
+            sql = sqlSupport.getInsertSql();
+            paramsTuple = Tuple.wrap(params);
+        }
         return conn.preparedQuery(sql)
-                .execute(params)
+                .execute(paramsTuple)
                 .map(res -> {
                     try {
                         if (genPk) {
-                            var id = cast(res.property(MySQLClient.LAST_INSERTED_ID));
-                            rowMapper.setId(entity, id);
+                            idAccessor.setId(entity, idAccessor.db2IdValue(res.property(MySQLClient.LAST_INSERTED_ID)));
                         }
                         return entity;
                     } catch (Exception e) {
@@ -88,42 +69,27 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
                 });
     }
 
-    @SuppressWarnings("unchecked")
-    private ID cast(Long id) {
-        Object value;
-        if (Long.class.equals(idClass)) {
-            value = id;
-        } else if (Integer.class.equals(idClass)) {
-            value = id.intValue();
-        } else if (Short.class.equals(idClass)) {
-            value = id.shortValue();
-        } else if (Byte.class.equals(idClass)) {
-            value = id.byteValue();
-        } else {
-            value = id;
-        }
-        return (ID) value;
-    }
-
     @Override
     public Future<E> update(SqlConnection conn, E entity) {
-        var params = rowMapper.toTuple(entity);
-        return conn.preparedQuery(updateSql)
-                .execute(params)
+        var params = parametersMapper.apply(entity);
+        return conn.preparedQuery(sqlSupport.getUpdateSql())
+                .execute(Tuples.rotate(params, 1))
                 .map(entity);
     }
 
     private Future<E> upsert(SqlConnection conn, E entity) {
-        var params = rowMapper.toTuple(entity);
-        Tuples.addAll(params, rowMapper.toTuple(entity, false));
-        return conn.preparedQuery(upsertSql)
-                .execute(params)
+        var params = parametersMapper.apply(entity);
+        var upsertParams = new Object[(params.length << 1) - 1];
+        System.arraycopy(params, 1, upsertParams, 0, params.length - 1);
+        System.arraycopy(params, 0, upsertParams, params.length - 1, params.length);
+        return conn.preparedQuery(sqlSupport.getUpsertSql())
+                .execute(Tuple.wrap(upsertParams))
                 .map(entity);
     }
 
     public Future<Void> delete(SqlConnection conn, ID id) {
-        return conn.preparedQuery(deleteSql)
-                .execute(Tuple.of(rowMapper.id2DbValue(id)))
+        return conn.preparedQuery(sqlSupport.getDeleteSql())
+                .execute(Tuple.of(idAccessor.id2DbValue(id)))
                 .map(res -> {
                     if (res.rowCount() != 1) {
                         throw new EntityNotFoundException("Entity " + id + " is not found");
@@ -134,10 +100,9 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
 
     @Override
     public Future<Optional<E>> find(SqlConnection conn, ID id) {
-        String query = querySql + " WHERE `" + rowMapper.pkName() + "`=?";
-        return conn.preparedQuery(query)
-                .mapping(rowMapper::map)
-                .execute(Tuple.of(rowMapper.id2DbValue(id)))
+        return conn.preparedQuery(sqlSupport.getQueryByIdSql())
+                .mapping(rowMapper)
+                .execute(Tuple.of(idAccessor.id2DbValue(id)))
                 .map(this::toEntity);
     }
 
@@ -153,28 +118,28 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
 
     @Override
     public Future<List<E>> findAll(SqlConnection conn) {
-        return conn.query(querySql)
-                .collecting(Collectors.mapping(rowMapper::map, Collectors.toList()))
+        return conn.query(sqlSupport.getQuerySql())
+                .collecting(collector)
                 .execute()
                 .map(this::toList);
     }
 
     @Override
     public Future<List<E>> findAll(SqlConnection conn, Query<E> query) {
-        String queryStr = toSQL(querySql, query);
+        String sql = sqlSupport.getSql(sqlSupport.getQuerySql(), query);
         var params = getSqlParams(query);
-        return conn.preparedQuery(queryStr)
-                .collecting(Collectors.mapping(rowMapper::map, Collectors.toList()))
+        return conn.preparedQuery(sql)
+                .collecting(collector)
                 .execute(params)
                 .map(this::toList);
     }
 
     @Override
     public Future<Optional<E>> find(SqlConnection conn, Query<E> query) {
-        String queryStr = toSQL(querySql, query);
+        String sql = sqlSupport.getSql(sqlSupport.getQuerySql(), query);
         var params = getSqlParams(query);
-        return conn.preparedQuery(queryStr)
-                .mapping(rowMapper::map)
+        return conn.preparedQuery(sql)
+                .mapping(rowMapper)
                 .execute(params)
                 .map(this::toEntity);
     }
@@ -182,10 +147,10 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
     @Override
     public Future<Page<E>> findAll(SqlConnection conn, Query<E> query, PageRequest pageRequest) {
         query.limit(pageRequest.getSize()).offset(pageRequest.getOffset());
-        var queryStr = toSQL(querySql, query);
+        String sql = sqlSupport.getSql(sqlSupport.getQuerySql(), query);
         var params = getSqlParams(query);
-        return conn.preparedQuery(queryStr)
-                .collecting(Collectors.mapping(rowMapper::map, Collectors.toList()))
+        return conn.preparedQuery(sql)
+                .collecting(collector)
                 .execute(params)
                 .compose(sqlResult -> {
                     var content = sqlResult.value();
@@ -198,49 +163,35 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
 
     @Override
     public Future<Long> count(SqlConnection conn, Query<E> query) {
-        return conn.preparedQuery(where(countSql, query))
-                .execute(query.getConditionParams())
+        return conn.preparedQuery(sqlSupport.getQuerySql(sqlSupport.getCountSql(), query))
+                .execute(query.getQueryParams())
                 .map(res -> res.iterator().next().getLong(0));
     }
 
-    protected String where(String sql, Query<E> query) {
-        String condition = query.getConditionSql();
-        if (condition != null) {
-            sql = sql + " WHERE " + query.getConditionSql();
-        }
-        return sql;
+    @Override
+    public Future<Boolean> exists(SqlConnection conn, ID id) {
+        return conn.preparedQuery(sqlSupport.getExistByIdSql())
+                .execute(Tuple.of(idAccessor.id2DbValue(id)))
+                .map(res -> res.size() > 0);
     }
 
-    protected String toSQL(String sql, Query<E> query) {
-        StringBuilder queryStr = new StringBuilder(sql);
-        String condition = query.getConditionSql();
-        if (condition != null) {
-            queryStr.append(" WHERE ").append(condition);
-        }
-        if (query.orderBy() != null && !query.orderBy().isEmpty()) {
-            queryStr.append(" ORDER BY ");
-            query.orderBy().forEach(o -> queryStr.append("`").append(o.getFieldName()).append("` ")
-                    .append(o.isDescending() ? "DESC," : "ASC,"));
-            queryStr.deleteCharAt(queryStr.length() - 1);
-        }
-
-        if (query.limit() >= 0) {
-            queryStr.append(" LIMIT ?");
-        }
-        if (query.offset() >= 0) {
-            queryStr.append(" OFFSET ?");
-        }
-        return queryStr.toString();
+    @Override
+    public Future<Boolean> exists(SqlConnection conn, Query<E> query) {
+        query.limit(1).offset(-1);
+        String sql = sqlSupport.getSql(sqlSupport.getExistSql(), query);
+        var params = getSqlParams(query);
+        return conn.preparedQuery(sql)
+                .execute(params)
+                .map(res -> res.size() > 0);
     }
-
 
     protected Tuple getSqlParams(Query<E> query) {
         if (query.limit() < 0 && query.offset() < 0) {
-            return query.getConditionParams();
+            return query.getQueryParams();
         }
 
-        var params = query.getConditionParams();
-        params = Tuples.addAll(new ArrayTuple(params.size() + 2), params);
+        var params = Tuple.tuple();
+        params = query.appendQueryParams(params);
         if (query.limit() >= 0) {
             params.addInteger(query.limit());
         }
@@ -248,11 +199,6 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
             params.addLong(query.offset());
         }
         return params;
-    }
-
-
-    public RowMapper<ID, E> getRowMapper() {
-        return rowMapper;
     }
 
     @Override
