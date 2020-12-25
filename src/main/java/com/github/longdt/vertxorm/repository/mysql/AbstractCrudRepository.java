@@ -4,7 +4,6 @@ import com.github.longdt.vertxorm.repository.*;
 import com.github.longdt.vertxorm.repository.query.Query;
 import com.github.longdt.vertxorm.util.Tuples;
 import io.vertx.core.Future;
-import io.vertx.core.impl.Arguments;
 import io.vertx.mysqlclient.MySQLClient;
 import io.vertx.sqlclient.*;
 
@@ -25,7 +24,6 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
 
 
     public void init(Pool pool, Configuration<ID, E> configuration) {
-        Arguments.require(configuration.getDialect() == SqlDialect.MYSQL, "Invalid dialect");
         this.pool = pool;
         this.rowMapper = Objects.requireNonNull(configuration.getRowMapper());
         this.collector = Collectors.mapping(rowMapper, Collectors.toList());
