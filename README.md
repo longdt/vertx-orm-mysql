@@ -46,6 +46,7 @@ public class RuleTemplate {
 ```
 ##### Define Repository:
 ```
+@Repository(dialect = SqlDialect.MYSQL)
 public interface RuleTemplateRepository extends CrudRepository<Integer, RuleTemplate> {
 }
 ```
