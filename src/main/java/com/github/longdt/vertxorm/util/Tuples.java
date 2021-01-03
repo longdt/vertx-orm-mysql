@@ -80,4 +80,8 @@ public class Tuples {
     public static Tuple rotate(Object[] data, int offset) {
         return new RotatedArrayTuple(data, offset);
     }
+
+    public static Tuple sub(Object[] data, int offset, int length) {
+        return new SubArrayTuple(data, offset, length);
+    }
 }

@@ -1,7 +1,8 @@
 package com.github.longdt.vertxorm.repository;
 
 import com.github.longdt.vertxorm.repository.query.Query;
-import com.github.longdt.vertxorm.repository.query.QueryFactory;
+
+import java.util.List;
 
 /**
  * <p>SqlSupport interface.</p>
@@ -10,6 +11,7 @@ import com.github.longdt.vertxorm.repository.query.QueryFactory;
  * @version $Id: $Id
  */
 public interface SqlSupport {
+    List<String> getColumnNames();
     /**
      * <p>getInsertSql.</p>
      *
@@ -37,6 +39,12 @@ public interface SqlSupport {
      * @return a {@link java.lang.String} object.
      */
     String getUpdateSql();
+
+    <E> int getUpdateSql(StringBuilder sqlBuilder, Query<E> query);
+
+    int getUpdateDynamicSql(StringBuilder sqlBuilder, Object[] params);
+
+    <E> int getUpdateDynamicSql(StringBuilder sqlBuilder, Object[] params, Query<E> query);
 
     /**
      * <p>getQuerySql.</p>

@@ -6,6 +6,7 @@ import com.github.longdt.vertxorm.util.Tuples;
 import io.vertx.core.Future;
 import io.vertx.mysqlclient.MySQLClient;
 import io.vertx.sqlclient.*;
+import io.vertx.sqlclient.impl.ArrayTuple;
 
 import java.util.List;
 import java.util.Objects;
@@ -88,6 +89,73 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
         return conn.preparedQuery(sqlSupport.getUpdateSql())
                 .execute(Tuples.rotate(params, 1))
                 .map(entity);
+    }
+
+    @Override
+    public Future<E> update(SqlConnection conn, E entity, Query<E> query) {
+        var params = parametersMapper.apply(entity);
+        var sqlBuilder = new StringBuilder();
+        int index = sqlSupport.getUpdateSql(sqlBuilder, query);
+        Tuple paramsTuple;
+        if (index > sqlSupport.getColumnNames().size()) {
+            paramsTuple = new ArrayTuple(index);
+            Tuples.addAll(paramsTuple, params, 1);
+            query.appendQueryParams(paramsTuple);
+        } else {
+            paramsTuple = Tuples.rotate(params, 1);
+        }
+        return conn.preparedQuery(sqlBuilder.toString())
+                .execute(paramsTuple)
+                .map(entity);
+    }
+
+    @Override
+    public Future<Boolean> updateDynamic(SqlConnection conn, E entity) {
+        var params = parametersMapper.apply(entity);
+        var id = params[0];
+        if (id == null) {
+            return Future.failedFuture(new IllegalArgumentException("id field must be set"));
+        }
+        var sqlBuilder = new StringBuilder();
+        int idx = sqlSupport.getUpdateDynamicSql(sqlBuilder, params);
+        if (idx == 1) {
+            return Future.succeededFuture(false);
+        }
+        idx = 0;
+        for (int i = 1; i < params.length; ++i) {
+            if (params[i] != null) {
+                params[idx++] = params[i];
+            }
+        }
+        params[idx++] = id;
+        return conn.preparedQuery(sqlBuilder.toString())
+                .execute(Tuples.sub(params, 0, idx))
+                .map(r -> r.rowCount() > 0);
+    }
+
+    @Override
+    public Future<Boolean> updateDynamic(SqlConnection conn, E entity, Query<E> query) {
+        var params = parametersMapper.apply(entity);
+        var id = params[0];
+        if (id == null) {
+            return Future.failedFuture(new IllegalArgumentException("id field must be set"));
+        }
+        var sqlBuilder = new StringBuilder();
+        int idx = sqlSupport.getUpdateDynamicSql(sqlBuilder, params, query);
+        var paramsTuple = new ArrayTuple(idx);
+        for (int i = 1; i < params.length; ++i) {
+            if (params[i] != null) {
+                paramsTuple.addValue(params[i]);
+            }
+        }
+        if (paramsTuple.size() == 0) {
+            return Future.succeededFuture(false);
+        }
+        paramsTuple.addValue(id);
+        query.appendQueryParams(paramsTuple);
+        return conn.preparedQuery(sqlBuilder.toString())
+                .execute(paramsTuple)
+                .map(r -> r.rowCount() > 0);
     }
 
     private Future<E> upsert(SqlConnection conn, E entity) {
