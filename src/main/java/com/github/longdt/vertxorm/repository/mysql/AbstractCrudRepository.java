@@ -88,29 +88,45 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
         var params = parametersMapper.apply(entity);
         return conn.preparedQuery(sqlSupport.getUpdateSql())
                 .execute(Tuples.rotate(params, 1))
-                .map(entity);
+                .map(rowSet -> {
+                    if (rowSet.rowCount() == 1) {
+                        return entity;
+                    } else {
+                        throw new EntityNotFoundException("Entity with id: " + params[0] + " is not found");
+                    }
+                });
     }
 
     @Override
     public Future<E> update(SqlConnection conn, E entity, Query<E> query) {
         var params = parametersMapper.apply(entity);
+        var id = params[0];
+        if (id == null) {
+            return Future.failedFuture(new IllegalArgumentException("id field must be set"));
+        }
         var sqlBuilder = new StringBuilder();
         int index = sqlSupport.getUpdateSql(sqlBuilder, query);
         Tuple paramsTuple;
         if (index > sqlSupport.getColumnNames().size()) {
             paramsTuple = new ArrayTuple(index);
-            Tuples.addAll(paramsTuple, params, 1);
+            Tuples.addAll(paramsTuple, params, 1).addValue(id);
             query.appendQueryParams(paramsTuple);
         } else {
             paramsTuple = Tuples.rotate(params, 1);
         }
         return conn.preparedQuery(sqlBuilder.toString())
                 .execute(paramsTuple)
-                .map(entity);
+                .map(rowSet -> {
+                    if (rowSet.rowCount() == 1) {
+                        return entity;
+                    } else {
+                        throw new EntityNotFoundException("Entity with id: " + params[0] + " is not found");
+                    }
+                });
     }
 
     @Override
-    public Future<Boolean> updateDynamic(SqlConnection conn, E entity) {
+    public Future<Void> updateDynamic(SqlConnection conn, E entity) {
         var params = parametersMapper.apply(entity);
         var id = params[0];
         if (id == null) {
@@ -119,7 +135,7 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
         var sqlBuilder = new StringBuilder();
         int idx = sqlSupport.getUpdateDynamicSql(sqlBuilder, params);
         if (idx == 1) {
-            return Future.succeededFuture(false);
+            return Future.succeededFuture();
         }
         idx = 0;
         for (int i = 1; i < params.length; ++i) {
@@ -130,11 +146,17 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
         params[idx++] = id;
         return conn.preparedQuery(sqlBuilder.toString())
                 .execute(Tuples.sub(params, 0, idx))
-                .map(r -> r.rowCount() > 0);
+                .map(rowSet -> {
+                    if (rowSet.rowCount() == 1) {
+                        return null;
+                    } else {
+                        throw new EntityNotFoundException("Entity with id: " + params[0] + " is not found");
+                    }
+                });
     }
 
     @Override
-    public Future<Boolean> updateDynamic(SqlConnection conn, E entity, Query<E> query) {
+    public Future<Void> updateDynamic(SqlConnection conn, E entity, Query<E> query) {
         var params = parametersMapper.apply(entity);
         var id = params[0];
         if (id == null) {
@@ -149,13 +171,19 @@ public abstract class AbstractCrudRepository<ID, E> implements CrudRepository<ID
             }
         }
         if (paramsTuple.size() == 0) {
-            return Future.succeededFuture(false);
+            return Future.succeededFuture();
         }
         paramsTuple.addValue(id);
         query.appendQueryParams(paramsTuple);
         return conn.preparedQuery(sqlBuilder.toString())
                 .execute(paramsTuple)
-                .map(r -> r.rowCount() > 0);
+                .map(rowSet -> {
+                    if (rowSet.rowCount() == 1) {
+                        return null;
+                    } else {
+                        throw new EntityNotFoundException("Entity with id: " + params[0] + " is not found");
+                    }
+                });
     }
 
     private Future<E> upsert(SqlConnection conn, E entity) {

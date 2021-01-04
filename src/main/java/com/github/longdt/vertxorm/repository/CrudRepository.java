@@ -80,17 +80,17 @@ public interface CrudRepository<ID, E> {
 
     Future<E> update(SqlConnection conn, E entity, Query<E> query);
 
-    default Future<Boolean> updateDynamic(E entity) {
+    default Future<Void> updateDynamic(E entity) {
         return getPool().withConnection(conn -> updateDynamic(conn, entity));
     }
 
-    Future<Boolean> updateDynamic(SqlConnection conn, E entity);
+    Future<Void> updateDynamic(SqlConnection conn, E entity);
 
-    default Future<Boolean> updateDynamic(E entity, Query<E> query) {
+    default Future<Void> updateDynamic(E entity, Query<E> query) {
         return getPool().withConnection(conn -> updateDynamic(conn, entity, query));
     }
 
-    Future<Boolean> updateDynamic(SqlConnection conn, E entity, Query<E> query);
+    Future<Void> updateDynamic(SqlConnection conn, E entity, Query<E> query);
     /**
      * <p>delete.</p>
      *
