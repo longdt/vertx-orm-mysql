@@ -31,7 +31,7 @@ public class SqlSupportImpl implements SqlSupport {
     /**
      * <p>Constructor for SqlSupportImpl.</p>
      *
-     * @param tableName a {@link java.lang.String} object.
+     * @param tableName   a {@link java.lang.String} object.
      * @param columnNames a {@link java.util.List} object.
      */
     public SqlSupportImpl(String tableName, List<String> columnNames) {
@@ -73,43 +73,102 @@ public class SqlSupportImpl implements SqlSupport {
         return columnNames.get(0);
     }
 
-    /** {@inheritDoc} */
+    @Override
+    public List<String> getColumnNames() {
+        return columnNames;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getInsertSql() {
         return insertSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getAutoIdInsertSql() {
         return autoIdInsertSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getUpsertSql() {
         return upsertSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getUpdateSql() {
         return updateSql;
     }
 
-    /** {@inheritDoc} */
+    @Override
+    public <E> int getUpdateSql(StringBuilder sqlBuilder, Query<E> query) {
+        sqlBuilder.append(updateSql).append(" AND ");
+        return query.appendQuerySql(sqlBuilder, columnNames.size());
+    }
+
+    @Override
+    public int getUpdateDynamicSql(StringBuilder sqlBuilder, Object[] params) {
+        sqlBuilder.append("UPDATE `").append(tableName).append("` SET ");
+        int counter = 0;
+        for (int i = 1; i < params.length; ++i) {
+            if (params[i] != null) {
+                sqlBuilder.append('`').append(columnNames.get(i)).append("`=?,");
+                ++counter;
+            }
+        }
+        if (counter > 0) {
+            sqlBuilder.setLength(sqlBuilder.length() - 1);
+        }
+        sqlBuilder.append(" WHERE `").append(getIdName()).append("` = ?");
+        return counter + 1;
+    }
+
+    @Override
+    public <E> int getUpdateDynamicSql(StringBuilder sqlBuilder, Object[] params, Query<E> query) {
+        sqlBuilder.append("UPDATE `").append(tableName).append("` SET ");
+        int counter = 0;
+        for (int i = 1; i < params.length; ++i) {
+            if (params[i] != null) {
+                sqlBuilder.append('`').append(columnNames.get(i)).append("`=?,");
+                ++counter;
+            }
+        }
+        if (counter > 0) {
+            sqlBuilder.setLength(sqlBuilder.length() - 1);
+        }
+        sqlBuilder.append(" WHERE `").append(getIdName()).append("` = ? AND ");
+        return query.appendQuerySql(sqlBuilder, counter + 1);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getQuerySql() {
         return querySql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getQueryByIdSql() {
         return queryByIdSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public <E> String getSql(String sql, Query<E> query) {
         StringBuilder sqlBuilder = new StringBuilder(sql);
@@ -133,25 +192,33 @@ public class SqlSupportImpl implements SqlSupport {
         return sqlBuilder.toString();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getCountSql() {
         return countSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getExistSql() {
         return existSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getExistByIdSql() {
         return existByIdSql;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String getDeleteSql() {
         return deleteSql;
