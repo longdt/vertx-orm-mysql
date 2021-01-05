@@ -135,19 +135,9 @@ public class SqlSupportImpl implements SqlSupport {
 
     @Override
     public <E> int getUpdateDynamicSql(StringBuilder sqlBuilder, Object[] params, Query<E> query) {
-        sqlBuilder.append("UPDATE `").append(tableName).append("` SET ");
-        int counter = 0;
-        for (int i = 1; i < params.length; ++i) {
-            if (params[i] != null) {
-                sqlBuilder.append('`').append(columnNames.get(i)).append("`=?,");
-                ++counter;
-            }
-        }
-        if (counter > 0) {
-            sqlBuilder.setLength(sqlBuilder.length() - 1);
-        }
-        sqlBuilder.append(" WHERE `").append(getIdName()).append("` = ? AND ");
-        return query.appendQuerySql(sqlBuilder, counter + 1);
+        int index = getUpdateDynamicSql(sqlBuilder, params);
+        sqlBuilder.append(" AND ");
+        return query.appendQuerySql(sqlBuilder, index);
     }
 
     /**
